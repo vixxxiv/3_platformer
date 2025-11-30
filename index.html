@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Платформер</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .game-container {
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #444;
+        }
+
+        .game-header h1 {
+            font-size: 2rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .game-stats {
+            display: flex;
+            gap: 20px;
+        }
+
+        .stat {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 15px;
+            border-radius: 10px;
+            font-weight: bold;
+        }
+
+        .game-canvas-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        #gameCanvas {
+            background: linear-gradient(to bottom, #87CEEB, #1E90FF);
+            border: 3px solid #444;
+            border-radius: 10px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .game-over, .level-complete {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.9);
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            border: 3px solid gold;
+            z-index: 10;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        button {
+            background: linear-gradient(to bottom, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            margin: 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(to bottom, #45a049, #4CAF50);
+        }
+
+        .game-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 15px;
+            border-top: 2px solid #444;
+        }
+
+        .instructions {
+            text-align: right;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-header">
+            <h1>JavaScript Платформер</h1>
+            <div class="game-stats">
+                <div class="stat">Очки: <span id="score">0</span></div>
+                <div class="stat">Уровень: <span id="level">1</span></div>
+                <div class="stat">Жизни: <span id="lives">3</span></div>
+            </div>
+        </div>
+        
+        <div class="game-canvas-container">
+            <canvas id="gameCanvas" width="800" height="500"></canvas>
+            <div id="gameOver" class="game-over hidden">
+                <h2>Игра окончена!</h2>
+                <p>Ваш счет: <span id="finalScore">0</span></p>
+                <button id="restartButton">Играть снова</button>
+            </div>
+            <div id="levelComplete" class="level-complete hidden">
+                <h2>Уровень пройден!</h2>
+                <p>Вы собрали все монеты</p>
+                <button id="nextLevelButton">Следующий уровень</button>
+            </div>
+        </div>
+        
+        <div class="game-controls">
+            <button id="startButton">Старт</button>
+            <button id="pauseButton">Пауза</button>
+            <div class="instructions">
+                <p>Управление: ← → для движения, ПРОБЕЛ для прыжка</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // InputHandler.js
+        class InputHandler {
+            constructor() {
+                this.keys = {};
+                
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                    }
+                });
+                
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+            }
+        }
+
+        // Player.js
+        class Player {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.velocityX = 0;
+                this.velocityY = 0;
+                this.speed = 5;
+                this.jumpPower = 12;
+                this.isOnGround = false;
+                this.color = '#E74C3C';
+            }
+            
+            update(deltaTime, keys, gravity) {
+                this.velocityY += gravity;
+                this.velocityX = 0;
+                
+                if (keys['ArrowLeft'] || keys['KeyA']) {
+                    this.velocityX = -this.speed;
+                }
+                
+                if (keys['ArrowRight'] || keys['KeyD']) {
+                    this.velocityX = this.speed;
+                }
+                
+                if ((keys['Space'] || keys['KeyW'] || keys['ArrowUp']) && this.isOnGround) {
+                    this.velocityY = -this.jumpPower;
+                    this.isOnGround = false;
+                }
+                
+                this.x += this.velocityX;
+                this.y += this.velocityY;
+                
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > 800) this.x = 800 - this.width;
+                
+                this.isOnGround = false;
+            }
+            
+            getBounds() {
+                return {
+                    x: this.x,
+                    y: this.y,
+                    width: this.width,
+                    height: this.height
+                };
+            }
+        }
+
+        // Platform.js
+        class Platform {
+            constructor(x, y, width, height, color = '#2ECC71') {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+            }
+            
+            getBounds() {
+                return {
+                    x: this.x,
+                    y: this.y,
+                    width: this.width,
+                    height: this.height
+                };
+            }
+        }
+
+        // Coin.js
+        class Coin {
+            constructor(x, y, width, height) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.collected = false;
+                this.animationFrame = 0;
+            }
+            
+            getBounds() {
+                return {
+                    x: this.x,
+                    y: this.y,
+                    width: this.width,
+                    height: this.height
+                };
+            }
+            
+            update() {
+                this.animationFrame = (this.animationFrame + 1) % 60;
+            }
+            
+            collect() {
+                this.collected = true;
+            }
+        }
+
+        // Collision.js
+        class Collision {
+            checkPlatformCollisions(player, platforms) {
+                player.isOnGround = false;
+                
+                for (const platform of platforms) {
+                    if (this.rectRectCollision(player, platform)) {
+                        const playerBottom = player.y + player.height;
+                        const platformTop = platform.y;
+                        const playerTop = player.y;
+                        const platformBottom = platform.y + platform.height;
+                        const playerRight = player.x + player.width;
+                        const platformLeft = platform.x;
+                        const playerLeft = player.x;
+                        const platformRight = platform.x + platform.width;
+                        
+                        if (playerBottom > platformTop && 
+                            playerBottom - player.velocityY <= platformTop && 
+                            playerRight > platformLeft && 
+                            playerLeft < platformRight) {
+                            
+                            player.y = platformTop - player.height;
+                            player.velocityY = 0;
+                            player.isOnGround = true;
+                        }
+                        else if (playerTop < platformBottom && 
+                                 playerTop - player.velocityY >= platformBottom && 
+                                 playerRight > platformLeft && 
+                                 playerLeft < platformRight) {
+                            
+                            player.y = platformBottom;
+                            player.velocityY = 0;
+                        }
+                        else if (playerRight > platformLeft && 
+                                 playerRight - player.velocityX <= platformLeft && 
+                                 playerBottom > platformTop && 
+                                 playerTop < platformBottom) {
+                            
+                            player.x = platformLeft - player.width;
+                        }
+                        else if (playerLeft < platformRight && 
+                                 playerLeft - player.velocityX >= platformRight && 
+                                 playerBottom > platformTop && 
+                                 playerTop < platformBottom) {
+                            
+                            player.x = platformRight;
+                        }
+                    }
+                }
+            }
+            
+            checkCoinCollisions(player, coins, onCollect) {
+                for (let i = coins.length - 1; i >= 0; i--) {
+                    const coin = coins[i];
+                    
+                    if (!coin.collected && this.rectRectCollision(player, coin)) {
+                        coin.collect();
+                        coins.splice(i, 1);
+                        onCollect(coin);
+                    }
+                }
+            }
+            
+            rectRectCollision(rect1, rect2) {
+                const bounds1 = rect1.getBounds();
+                const bounds2 = rect2.getBounds();
+                
+                return bounds1.x < bounds2.x + bounds2.width &&
+                       bounds1.x + bounds1.width > bounds2.x &&
+                       bounds1.y < bounds2.y + bounds2.height &&
+                       bounds1.y + bounds1.height > bounds2.y;
+            }
+        }
+
+        // Renderer.js
+        class Renderer {
+            constructor(ctx, canvas) {
+                this.ctx = ctx;
+                this.canvas = canvas;
+            }
+            
+            clear() {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+            
+            drawBackground() {
+                const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+                gradient.addColorStop(0, '#87CEEB');
+                gradient.addColorStop(1, '#1E90FF');
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                this.ctx.beginPath();
+                this.ctx.arc(100, 80, 30, 0, Math.PI * 2);
+                this.ctx.arc(130, 70, 40, 0, Math.PI * 2);
+                this.ctx.arc(160, 80, 30, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+            
+            drawPlayer(player) {
+                this.ctx.fillStyle = player.color;
+                this.ctx.fillRect(player.x, player.y, player.width, player.height);
+                
+                this.ctx.fillStyle = 'white';
+                this.ctx.fillRect(player.x + 10, player.y + 10, 8, 8);
+                this.ctx.fillRect(player.x + player.width - 18, player.y + 10, 8, 8);
+                
+                this.ctx.fillStyle = 'black';
+                this.ctx.fillRect(player.x + 12, player.y + 12, 4, 4);
+                this.ctx.fillRect(player.x + player.width - 16, player.y + 12, 4, 4);
+                
+                this.ctx.beginPath();
+                this.ctx.strokeStyle = 'black';
+                this.ctx.lineWidth = 2;
+                this.ctx.arc(player.x + player.width / 2, player.y + 30, 10, 0.2, Math.PI - 0.2);
+                this.ctx.stroke();
+            }
+            
+            drawPlatform(platform) {
+                this.ctx.fillStyle = platform.color;
+                this.ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                
+                this.ctx.fillStyle = '#27AE60';
+                for (let i = 0; i < platform.width; i += 20) {
+                    this.ctx.fillRect(platform.x + i, platform.y, 10, 5);
+                }
+            }
+            
+            drawCoin(coin) {
+                coin.update();
+                const scale = 0.8 + Math.sin(coin.animationFrame * 0.1) * 0.2;
+                const coinX = coin.x + coin.width / 2;
+                const coinY = coin.y + coin.height / 2;
+                const radius = coin.width / 2 * scale;
+                
+                const gradient = this.ctx.createRadialGradient(
+                    coinX, coinY, 0,
+                    coinX, coinY, radius
+                );
+                gradient.addColorStop(0, '#FFD700');
+                gradient.addColorStop(1, '#B8860B');
+                
+                this.ctx.fillStyle = gradient;
+                this.ctx.beginPath();
+                this.ctx.arc(coinX, coinY, radius, 0, Math.PI * 2);
+                this.ctx.fill();
+                
+                this.ctx.fillStyle = '#FFF8DC';
+                this.ctx.beginPath();
+                this.ctx.arc(coinX, coinY, radius * 0.6, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+            
+            drawUI(score, level, lives) {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                this.ctx.fillRect(10, 10, 150, 80);
+                
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = '16px Arial';
+                this.ctx.fillText(`Очки: ${score}`, 20, 30);
+                this.ctx.fillText(`Уровень: ${level}`, 20, 50);
+                this.ctx.fillText(`Жизни: ${lives}`, 20, 70);
+            }
+        }
+
+        // Game.js
+        class Game {
+            constructor(canvas, ctx, uiElements) {
+                this.canvas = canvas;
+                this.ctx = ctx;
+                this.uiElements = uiElements;
+                
+                this.score = 0;
+                this.level = 1;
+                this.lives = 3;
+                this.isRunning = false;
+                this.isPaused = false;
+                this.gameOver = false;
+                
+                this.player = null;
+                this.platforms = [];
+                this.coins = [];
+                this.inputHandler = null;
+                this.collisionSystem = null;
+                this.renderer = null;
+                
+                this.gravity = 0.5;
+                this.lastTime = 0;
+                this.accumulator = 0;
+                this.timeStep = 1000 / 60;
+                
+                this.init();
+            }
+            
+            init() {
+                this.inputHandler = new InputHandler();
+                this.collisionSystem = new Collision();
+                this.renderer = new Renderer(this.ctx, this.canvas);
+                this.createPlayer();
+                this.generateLevel(this.level);
+                this.updateUI();
+            }
+            
+            createPlayer() {
+                this.player = new Player(
+                    this.canvas.width / 2 - 25,
+                    this.canvas.height - 150,
+                    50,
+                    50
+                );
+            }
+            
+            generateLevel(level) {
+                this.platforms = [];
+                this.coins = [];
+                
+                this.platforms.push(new Platform(0, this.canvas.height - 20, this.canvas.width, 20));
+                this.platforms.push(new Platform(100, 400, 200, 20));
+                this.platforms.push(new Platform(400, 350, 150, 20));
+                this.platforms.push(new Platform(200, 250, 200, 20));
+                this.platforms.push(new Platform(500, 200, 150, 20));
+                this.platforms.push(new Platform(100, 150, 200, 20));
+                
+                for (let i = 0; i < 5 + level * 2; i++) {
+                    const x = Math.random() * (this.canvas.width - 30);
+                    const y = Math.random() * (this.canvas.height - 150);
+                    this.coins.push(new Coin(x, y, 20, 20));
+                }
+            }
+            
+            start() {
+                if (!this.isRunning && !this.gameOver) {
+                    this.isRunning = true;
+                    this.isPaused = false;
+                    this.gameLoop();
+                }
+            }
+            
+            pause() {
+                this.isPaused = true;
+            }
+            
+            resume() {
+                this.isPaused = false;
+                this.gameLoop();
+            }
+            
+            restart() {
+                this.score = 0;
+                this.level = 1;
+                this.lives = 3;
+                this.gameOver = false;
+                this.isRunning = false;
+                this.isPaused = false;
+                this.createPlayer();
+                this.generateLevel(this.level);
+                this.updateUI();
+            }
+            
+            nextLevel() {
+                this.level++;
+                this.createPlayer();
+                this.generateLevel(this.level);
+                this.updateUI();
+                this.start();
+            }
+            
+            gameLoop(currentTime = 0) {
+                if (!this.isRunning || this.isPaused) return;
+                
+                const deltaTime = currentTime - this.lastTime;
+                this.lastTime = currentTime;
+                this.accumulator += deltaTime;
+                
+                while (this.accumulator >= this.timeStep) {
+                    this.update(this.timeStep);
+                    this.accumulator -= this.timeStep;
+                }
+                
+                this.render();
+                
+                if (!this.gameOver) {
+                    requestAnimationFrame((time) => this.gameLoop(time));
+                }
+            }
+            
+            update(deltaTime) {
+                this.player.update(deltaTime, this.inputHandler.keys, this.gravity);
+                this.collisionSystem.checkPlatformCollisions(this.player, this.platforms);
+                this.collisionSystem.checkCoinCollisions(this.player, this.coins, (coin) => {
+                    this.score += 10;
+                    this.updateUI();
+                });
+                
+                if (this.player.y > this.canvas.height) {
+                    this.lives--;
+                    this.updateUI();
+                    
+                    if (this.lives <= 0) {
+                        this.endGame();
+                    } else {
+                        this.player.x = this.canvas.width / 2 - 25;
+                        this.player.y = this.canvas.height - 150;
+                        this.player.velocityY = 0;
+                    }
+                }
+                
+                if (this.coins.length === 0) {
+                    this.completeLevel();
+                }
+            }
+            
+            render() {
+                this.renderer.clear();
+                this.renderer.drawBackground();
+                this.platforms.forEach(platform => this.renderer.drawPlatform(platform));
+                this.coins.forEach(coin => this.renderer.drawCoin(coin));
+                this.renderer.drawPlayer(this.player);
+                this.renderer.drawUI(this.score, this.level, this.lives);
+            }
+            
+            updateUI() {
+                this.uiElements.scoreElement.textContent = this.score;
+                this.uiElements.levelElement.textContent = this.level;
+                this.uiElements.livesElement.textContent = this.lives;
+            }
+            
+            completeLevel() {
+                this.isRunning = false;
+                this.uiElements.levelCompleteScreen.classList.remove('hidden');
+            }
+            
+            endGame() {
+                this.isRunning = false;
+                this.gameOver = true;
+                this.uiElements.finalScoreElement.textContent = this.score;
+                this.uiElements.gameOverScreen.classList.remove('hidden');
+            }
+        }
+
+        // main.js
+        document.addEventListener('DOMContentLoaded', function() {
+            const canvas = document.getElementById('gameCanvas');
+            const ctx = canvas.getContext('2d');
+            
+            const startButton = document.getElementById('startButton');
+            const pauseButton = document.getElementById('pauseButton');
+            const restartButton = document.getElementById('restartButton');
+            const nextLevelButton = document.getElementById('nextLevelButton');
+            
+            const scoreElement = document.getElementById('score');
+            const levelElement = document.getElementById('level');
+            const livesElement = document.getElementById('lives');
+            const finalScoreElement = document.getElementById('finalScore');
+            
+            const gameOverScreen = document.getElementById('gameOver');
+            const levelCompleteScreen = document.getElementById('levelComplete');
+            
+            const game = new Game(canvas, ctx, {
+                scoreElement,
+                levelElement,
+                livesElement,
+                finalScoreElement,
+                gameOverScreen,
+                levelCompleteScreen
+            });
+            
+            startButton.addEventListener('click', () => {
+                game.start();
+                startButton.disabled = true;
+                pauseButton.disabled = false;
+            });
+            
+            pauseButton.addEventListener('click', () => {
+                if (game.isPaused) {
+                    game.resume();
+                    pauseButton.textContent = 'Пауза';
+                } else {
+                    game.pause();
+                    pauseButton.textContent = 'Продолжить';
+                }
+            });
+            
+            restartButton.addEventListener('click', () => {
+                game.restart();
+                gameOverScreen.classList.add('hidden');
+                startButton.disabled = true;
+                pauseButton.disabled = false;
+                pauseButton.textContent = 'Пауза';
+            });
+            
+            nextLevelButton.addEventListener('click', () => {
+                game.nextLevel();
+                levelCompleteScreen.classList.add('hidden');
+                startButton.disabled = true;
+                pauseButton.disabled = false;
+                pauseButton.textContent = 'Пауза';
+            });
+            
+            game.init();
+        });
+    </script>
+</body>
+</html>
